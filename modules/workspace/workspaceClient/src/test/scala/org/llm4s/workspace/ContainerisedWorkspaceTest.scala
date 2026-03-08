@@ -196,6 +196,38 @@ class ContainerisedWorkspaceTest extends AnyFunSuite with Matchers with BeforeAn
 
     println("Error handling works correctly via WebSocket")
   }
+
+  // ─── Heartbeat-executor lifecycle tests (no Docker required) ────────────────
+
+  test("getOrCreateHeartbeatExecutor returns a live executor when the ref is empty") {
+    val ws   = new ContainerisedWorkspace("/tmp/test-heartbeat", "dummy-image", 9999)
+    val exec = ws.getOrCreateHeartbeatExecutor()
+    exec.isShutdown  shouldBe false
+    exec.isTerminated shouldBe false
+    exec.shutdown()
+  }
+
+  test("getOrCreateHeartbeatExecutor returns the same executor on repeated calls while it is active") {
+    val ws    = new ContainerisedWorkspace("/tmp/test-heartbeat", "dummy-image", 9999)
+    val exec1 = ws.getOrCreateHeartbeatExecutor()
+    val exec2 = ws.getOrCreateHeartbeatExecutor()
+    exec1 should be theSameInstanceAs exec2
+    exec1.shutdown()
+  }
+
+  test("getOrCreateHeartbeatExecutor creates a fresh executor after stopContainer clears the ref") {
+    val ws    = new ContainerisedWorkspace("/tmp/test-heartbeat", "dummy-image", 9999)
+    val exec1 = ws.getOrCreateHeartbeatExecutor()
+    // Simulate what stopContainer does: shut down executor and clear the ref
+    exec1.shutdown()
+    ws.heartbeatExecutorRef.set(null)
+    // The next call must return a new, live executor
+    val exec2 = ws.getOrCreateHeartbeatExecutor()
+    exec2 shouldNot be theSameInstanceAs exec1
+    exec2.isShutdown  shouldBe false
+    exec2.isTerminated shouldBe false
+    exec2.shutdown()
+  }
 }
 
 /**

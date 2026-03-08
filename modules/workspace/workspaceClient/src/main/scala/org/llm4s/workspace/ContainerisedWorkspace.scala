@@ -11,6 +11,7 @@ import java.io.{ BufferedReader, File, InputStreamReader }
 import java.net.URI
 import java.util.concurrent.atomic.{ AtomicBoolean, AtomicReference }
 import java.util.concurrent.{ CompletableFuture, ConcurrentHashMap, Executors, ScheduledExecutorService, TimeUnit }
+import scala.annotation.tailrec
 import scala.jdk.CollectionConverters._
 import scala.util.{ Failure, Success, Try }
 import scala.util.Using
@@ -46,9 +47,9 @@ class ContainerisedWorkspace(
   private val ResponseTimeoutBufferSec = 5
 
   // State tracking
-  private val containerRunning                            = new AtomicBoolean(false)
-  private val wsConnected                                 = new AtomicBoolean(false)
-  private val heartbeatExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
+  private val containerRunning                        = new AtomicBoolean(false)
+  private val wsConnected                             = new AtomicBoolean(false)
+  private[workspace] val heartbeatExecutorRef         = new AtomicReference[ScheduledExecutorService](null)
 
   // WebSocket client and response handling
   private val wsClient          = new AtomicReference[WebSocketClient]()
@@ -261,10 +262,29 @@ class ContainerisedWorkspace(
     attempt.recover { case ex => logger.error(s"Exception connecting WebSocket: ${ex.getMessage}", ex); false }.get
   }
 
+  /**
+   * Returns the current heartbeat executor if it is live, or creates and CAS-installs
+   * a fresh one.  Retries on CAS failure so a shutdown executor is never returned.
+   */
+  @tailrec
+  private[workspace] final def getOrCreateHeartbeatExecutor(): ScheduledExecutorService = {
+    val existing = heartbeatExecutorRef.get()
+    if (existing != null && !existing.isShutdown && !existing.isTerminated) {
+      existing
+    } else {
+      val created = Executors.newSingleThreadScheduledExecutor()
+      if (heartbeatExecutorRef.compareAndSet(existing, created)) created
+      else {
+        created.shutdown()
+        getOrCreateHeartbeatExecutor() // CAS lost to another thread; retry
+      }
+    }
+  }
+
   private def startHeartbeatTask(): Unit = {
     logger.info("Starting heartbeat task")
 
-    heartbeatExecutor.scheduleAtFixedRate(
+    getOrCreateHeartbeatExecutor().scheduleAtFixedRate(
       () =>
         if (containerRunning.get() && wsConnected.get()) {
           val hb = Try(sendHeartbeat())
@@ -309,10 +329,13 @@ class ContainerisedWorkspace(
         .foreach(ex => logger.error(s"Error closing WebSocket: ${ex.getMessage}", ex))
     }
 
-    // Shutdown heartbeat task
-    heartbeatExecutor.shutdown()
-    val term = Try(heartbeatExecutor.awaitTermination(3, TimeUnit.SECONDS)).getOrElse(false)
-    if (!term) heartbeatExecutor.shutdownNow()
+    // Shutdown heartbeat task and clear the ref so the next startContainer() gets a fresh executor
+    val exec = heartbeatExecutorRef.getAndSet(null)
+    if (exec != null) {
+      exec.shutdown()
+      val term = Try(exec.awaitTermination(3, TimeUnit.SECONDS)).getOrElse(false)
+      if (!term) exec.shutdownNow()
+    }
 
     // Execute stop and remove as separate commands
     val stopResult = Try {
