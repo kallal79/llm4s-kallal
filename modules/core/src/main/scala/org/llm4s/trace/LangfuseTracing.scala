@@ -426,6 +426,40 @@ class LangfuseTracing(
           )
         )
 
+      case e: TraceEvent.ImageGenerationCompleted =>
+        val outputObj = ujson.Obj(
+          "model"       -> e.model,
+          "provider"    -> e.provider,
+          "operation"   -> e.operation,
+          "image_count" -> e.imageCount,
+          "size"        -> e.size,
+          "quality"     -> e.quality,
+          "duration_ms" -> e.durationMs,
+          "success"     -> e.success
+        )
+        e.costUsd.foreach(c => outputObj("cost_usd") = c)
+        e.errorMessage.foreach(m => outputObj("error_message") = m)
+
+        ujson.Obj(
+          "id"        -> uuid,
+          "timestamp" -> now,
+          "type"      -> "span-create",
+          "body" -> ujson.Obj(
+            "id"        -> uuid,
+            "timestamp" -> now,
+            "name"      -> "Image Generation",
+            "level"     -> (if (e.success) "DEFAULT" else "ERROR"),
+            "input" -> ujson.Obj(
+              "model"     -> e.model,
+              "operation" -> e.operation,
+              "size"      -> e.size,
+              "quality"   -> e.quality
+            ),
+            "output"   -> outputObj,
+            "metadata" -> outputObj
+          )
+        )
+
       case e: TraceEvent.RAGOperationCompleted =>
         val outputObj = ujson.Obj(
           "operation"   -> e.operation,

@@ -265,6 +265,25 @@ class OpenTelemetryTracing(
             .put("timestamp", e.timestamp.toString)
             .build()
         )
+
+      case e: TraceEvent.ImageGenerationCompleted =>
+        val builder = Attributes
+          .builder()
+          .put(TraceAttributes.EventType, "image-generation")
+          .put("gen_ai.request.model", e.model)
+          .put("provider", e.provider)
+          .put("operation", e.operation)
+          .put("image_count", e.imageCount.toLong)
+          .put("size", e.size)
+          .put("quality", e.quality)
+          .put("duration_ms", e.durationMs)
+          .put("success", e.success)
+        e.costUsd.foreach(c => builder.put("cost.usd", c))
+        e.errorMessage.foreach(m => builder.put("error.message", m))
+        (
+          "Image Generation - " + e.operation,
+          builder.build()
+        )
     }
   }
 
