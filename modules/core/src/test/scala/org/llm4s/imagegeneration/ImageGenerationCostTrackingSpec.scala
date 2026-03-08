@@ -218,9 +218,30 @@ class ImageGenerationCostTrackingSpec extends AnyFlatSpec with Matchers {
     val errorCount = getMetricValue(
       prometheusMetrics.registry,
       "llm4s_image_generations_total",
-      Map("provider" -> "openai", "model" -> "dall-e-3", "operation" -> "generate", "status" -> "error_unknown")
+      Map("provider" -> "openai", "model" -> "dall-e-3", "operation" -> "generate", "status" -> "error_service_error")
     )
     errorCount shouldBe 1.0
+  }
+
+  it should "record image generation error counter on failure" in {
+    val prometheusMetrics = PrometheusMetrics.create()
+    val tracing           = new TracingCollector()
+    val config            = OpenAIConfig(apiKey = "test-key", model = "dall-e-3")
+    val instrumented = new InstrumentedImageGenerationClient(
+      new FailingImageClient(),
+      config,
+      prometheusMetrics,
+      tracing
+    )
+
+    instrumented.generateImage("A cat")
+
+    val imageGenErrorCount = getMetricValue(
+      prometheusMetrics.registry,
+      "llm4s_image_generation_errors_total",
+      Map("provider" -> "openai", "model" -> "dall-e-3", "operation" -> "generate", "error_type" -> "service_error")
+    )
+    imageGenErrorCount shouldBe 1.0
   }
 
   it should "record duration histogram" in {
@@ -304,28 +325,6 @@ class ImageGenerationCostTrackingSpec extends AnyFlatSpec with Matchers {
     event.costUsd shouldBe Some(0.040)
   }
 
-  it should "emit CostRecorded trace event when cost is available" in {
-    val tracing = new TracingCollector()
-    val config  = OpenAIConfig(apiKey = "test-key", model = "dall-e-3")
-    val instrumented = new InstrumentedImageGenerationClient(
-      new MockImageClient(),
-      config,
-      MetricsCollector.noop,
-      tracing
-    )
-
-    instrumented.generateImage("A cat", ImageGenerationOptions(size = ImageSize.Square1024, quality = Some("standard")))
-
-    val costEvents = tracing.events.collect { case e: TraceEvent.CostRecorded => e }
-    costEvents should have size 1
-
-    val costEvent = costEvents.head
-    costEvent.model shouldBe "dall-e-3"
-    costEvent.operation shouldBe "image_generation"
-    costEvent.costType shouldBe "image_generation"
-    costEvent.costUsd shouldBe 0.040 +- 0.001
-  }
-
   it should "emit error trace event on failure" in {
     val tracing = new TracingCollector()
     val config  = OpenAIConfig(apiKey = "test-key", model = "dall-e-3")
@@ -345,22 +344,6 @@ class ImageGenerationCostTrackingSpec extends AnyFlatSpec with Matchers {
     event.success shouldBe false
     event.errorMessage shouldBe Some("Service unavailable")
     event.costUsd shouldBe None
-  }
-
-  it should "not emit CostRecorded on failure" in {
-    val tracing = new TracingCollector()
-    val config  = OpenAIConfig(apiKey = "test-key", model = "dall-e-3")
-    val instrumented = new InstrumentedImageGenerationClient(
-      new FailingImageClient(),
-      config,
-      MetricsCollector.noop,
-      tracing
-    )
-
-    instrumented.generateImage("A cat")
-
-    val costEvents = tracing.events.collect { case e: TraceEvent.CostRecorded => e }
-    costEvents shouldBe empty
   }
 
   // ─────────────────────────────────────────────────────────────

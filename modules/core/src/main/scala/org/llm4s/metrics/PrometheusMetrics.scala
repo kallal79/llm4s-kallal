@@ -110,6 +110,21 @@ final class PrometheusMetrics(
     .labelNames("provider", "model")
     .register(registry)
 
+  // Image generation error counter (Issue #501 requirement)
+  private val imageGenerationErrorsTotal = Counter
+    .builder()
+    .name("llm4s_image_generation_errors_total")
+    .help("Total number of image generation errors")
+    .labelNames("provider", "model", "operation", "error_type")
+    .register(registry)
+
+  /** Convert ErrorKind to a stable snake_case label for metrics. */
+  private def errorKindToLabel(errorKind: ErrorKind): String = {
+    val kindStr   = errorKind.toString
+    val snakeCase = kindStr.replaceAll("([A-Z])", "_$1").toLowerCase.drop(1)
+    snakeCase
+  }
+
   /**
    * Record an LLM request with its outcome and duration.
    *
@@ -124,11 +139,7 @@ final class PrometheusMetrics(
     Try {
       val status = outcome match {
         case Outcome.Success          => "success"
-        case Outcome.Error(errorKind) =>
-          // Convert PascalCase to snake_case: RateLimit -> rate_limit
-          val kindStr   = errorKind.toString
-          val snakeCase = kindStr.replaceAll("([A-Z])", "_$1").toLowerCase.drop(1)
-          s"error_$snakeCase"
+        case Outcome.Error(errorKind) => s"error_${errorKindToLabel(errorKind)}"
       }
 
       requestsTotal.labelValues(provider, model, status).inc()
@@ -136,8 +147,7 @@ final class PrometheusMetrics(
 
       outcome match {
         case Outcome.Error(errorKind) =>
-          val errorLabel = errorKind.toString.toLowerCase
-          errorsTotal.labelValues(provider, errorLabel).inc()
+          errorsTotal.labelValues(provider, errorKindToLabel(errorKind)).inc()
         case _ => // No additional action for success
       }
     }.recover { case e: Exception =>
@@ -193,11 +203,8 @@ final class PrometheusMetrics(
   ): Unit =
     Try {
       val status = outcome match {
-        case Outcome.Success => "success"
-        case Outcome.Error(errorKind) =>
-          val kindStr   = errorKind.toString
-          val snakeCase = kindStr.replaceAll("([A-Z])", "_$1").toLowerCase.drop(1)
-          s"error_$snakeCase"
+        case Outcome.Success          => "success"
+        case Outcome.Error(errorKind) => s"error_${errorKindToLabel(errorKind)}"
       }
 
       imageGenerationsTotal.labelValues(provider, model, operation, status).inc()
@@ -209,8 +216,9 @@ final class PrometheusMetrics(
 
       outcome match {
         case Outcome.Error(errorKind) =>
-          val errorLabel = errorKind.toString.toLowerCase
+          val errorLabel = errorKindToLabel(errorKind)
           errorsTotal.labelValues(provider, errorLabel).inc()
+          imageGenerationErrorsTotal.labelValues(provider, model, operation, errorLabel).inc()
         case _ =>
       }
     }.recover { case e: Exception =>

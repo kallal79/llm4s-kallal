@@ -34,6 +34,12 @@ object ImagePricingRegistry {
    *
    * Prices are approximate and may change. For the most accurate pricing,
    * consult the provider's pricing page.
+   *
+   * Note: Cost estimation uses the requested size, not the actual provider-billed
+   * dimensions. For models like dall-e-3 that normalize non-standard sizes to
+   * their nearest supported size, actual billing may differ.
+   *
+   * Last verified: July 2025
    */
   private val pricingTable: Map[(String, String, String), Double] = Map(
     // gpt-image-1
