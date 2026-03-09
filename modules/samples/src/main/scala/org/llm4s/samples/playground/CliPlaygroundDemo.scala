@@ -3,6 +3,10 @@ package org.llm4s.samples.playground
 import org.llm4s.trace.AnsiColors
 import org.llm4s.trace.AnsiColors._
 
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
+
 /**
  * CLI Playground Demo for new users and workshop attendees.
  *
@@ -10,6 +14,10 @@ import org.llm4s.trace.AnsiColors._
  * It replays pre-recorded scenarios with full ANSI-coloured console
  * output so that workshop participants can explore what LLM4S looks
  * like in action before wiring up a real provider.
+ *
+ * After the pre-recorded scenarios, an interactive prompt loop lets
+ * you type your own queries and see simulated traced responses in real
+ * time — no provider needed.
  *
  * == How to run ==
  * {{{
@@ -23,6 +31,7 @@ import org.llm4s.trace.AnsiColors._
  *   4. Agent pipeline
  *   5. Error handling and recovery
  *   6. Token usage awareness
+ *   7. Interactive prompt loop (try it yourself!)
  *
  * == Connecting to a real provider ==
  * Once you have an API key, swap `CliPlaygroundDemo` for
@@ -31,7 +40,7 @@ import org.llm4s.trace.AnsiColors._
  */
 object CliPlaygroundDemo extends App {
 
-  // ── helpers ──────────────────────────────────────────────────────────────
+  //  helpers 
 
   private def header(title: String): Unit = {
     println()
@@ -41,7 +50,7 @@ object CliPlaygroundDemo extends App {
   }
 
   private def step(label: String): Unit =
-    println(s"${GRAY}  ▶ $label$RESET")
+    println(s"${GRAY}   $label$RESET")
 
   private def userSays(text: String): Unit =
     println(s"  ${boldColor("You:", GREEN)}  $text")
@@ -63,7 +72,11 @@ object CliPlaygroundDemo extends App {
 
   private def pause(): Unit = Thread.sleep(120)
 
-  // ── welcome ───────────────────────────────────────────────────────────────
+  /** Returns the date of the next occurrence of the given weekday as an ISO string. */
+  private def nextWeekday(day: DayOfWeek): String =
+    LocalDate.now().`with`(TemporalAdjusters.next(day)).toString
+
+  //  welcome 
 
   private def printWelcome(): Unit = {
     println()
@@ -76,7 +89,7 @@ object CliPlaygroundDemo extends App {
     println(s"  ${GRAY}Follow along to see what LLM4S can do, then connect a real provider.$RESET")
   }
 
-  // ── scenario 1: simple completion ─────────────────────────────────────────
+  //  scenario 1: simple completion 
 
   private def scenario1(): Unit = {
     header("Scenario 1 — Simple Text Completion")
@@ -89,7 +102,7 @@ object CliPlaygroundDemo extends App {
     info("completion id: cmpl-demo-001  model: gpt-4o  tokens: 42")
   }
 
-  // ── scenario 2: multi-turn conversation ───────────────────────────────────
+  //  scenario 2: multi-turn conversation 
 
   private def scenario2(): Unit = {
     header("Scenario 2 — Multi-Turn Conversation")
@@ -103,7 +116,7 @@ object CliPlaygroundDemo extends App {
     info("LLM4S keeps the full message history so the model remembers context.")
   }
 
-  // ── scenario 3: tool calling ───────────────────────────────────────────────
+  //  scenario 3: tool calling 
 
   private def scenario3(): Unit = {
     header("Scenario 3 — Tool Calling")
@@ -114,12 +127,12 @@ object CliPlaygroundDemo extends App {
     pause()
     toolResult("""{"temperature": 14, "condition": "Partly cloudy", "humidity": "72%"}""")
     pause()
-    llmSays("The current weather in London is 14 °C and partly cloudy, with")
+    llmSays("The current weather in London is 14 C and partly cloudy, with")
     llmSays("72 % humidity.")
     info("Tool calls are structured JSON — LLM4S validates arguments automatically.")
   }
 
-  // ── scenario 4: agent pipeline ────────────────────────────────────────────
+  //  scenario 4: agent pipeline 
 
   private def scenario4(): Unit = {
     header("Scenario 4 — Agent Pipeline")
@@ -132,15 +145,15 @@ object CliPlaygroundDemo extends App {
     pause()
     toolCall("fetch_wikipedia_summary", """{"title": "ChatGPT"}""")
     pause()
-    toolResult(""""ChatGPT is an AI chatbot developed by OpenAI …"""")
+    toolResult(""""ChatGPT is an AI chatbot developed by OpenAI """")
     pause()
     toolCall("fetch_wikipedia_summary", """{"title": "Academy Awards"}""")
     pause()
-    toolResult(""""The Academy Awards, or Oscars, are presented by AMPAS …"""")
+    toolResult(""""The Academy Awards, or Oscars, are presented by AMPAS """")
     pause()
     toolCall("fetch_wikipedia_summary", """{"title": "FIFA World Cup"}""")
     pause()
-    toolResult(""""The FIFA World Cup is an international association football tournament …"""")
+    toolResult(""""The FIFA World Cup is an international association football tournament """")
     pause()
     llmSays("Here are last week's three most-viewed articles:")
     llmSays("1. ChatGPT — OpenAI's conversational AI assistant.")
@@ -149,18 +162,20 @@ object CliPlaygroundDemo extends App {
     info("The agent orchestrated 4 tool calls automatically.")
   }
 
-  // ── scenario 5: error handling ────────────────────────────────────────────
+  //  scenario 5: error handling 
 
   private def scenario5(): Unit = {
     header("Scenario 5 — Error Handling and Recovery")
     step("Demonstrating graceful recovery when a tool call fails")
     userSays("Book a flight from Zurich to Tokyo for next Monday.")
     pause()
-    toolCall("book_flight", """{"origin": "ZRH", "destination": "TYO", "date": "2025-03-17"}""")
+    val monday  = nextWeekday(DayOfWeek.MONDAY)
+    val tuesday = nextWeekday(DayOfWeek.TUESDAY)
+    toolCall("book_flight", s"""{"origin": "ZRH", "destination": "TYO", "date": "$monday"}""")
     pause()
-    errorLine("ToolExecutionError: No seats available on ZRH→TYO for 2025-03-17")
+    errorLine(s"ToolExecutionError: No seats available on ZRHTYO for $monday")
     pause()
-    toolCall("book_flight", """{"origin": "ZRH", "destination": "TYO", "date": "2025-03-18"}""")
+    toolCall("book_flight", s"""{"origin": "ZRH", "destination": "TYO", "date": "$tuesday"}""")
     pause()
     toolResult("""{"booking_id": "BA-98321", "seat": "23A", "price": "CHF 1 420"}""")
     pause()
@@ -169,7 +184,7 @@ object CliPlaygroundDemo extends App {
     info("LLM4S surfaces ToolCallError details so the LLM can retry or explain.")
   }
 
-  // ── scenario 6: token usage ───────────────────────────────────────────────
+  //  scenario 6: token usage 
 
   private def scenario6(): Unit = {
     header("Scenario 6 — Token Usage Awareness")
@@ -187,7 +202,32 @@ object CliPlaygroundDemo extends App {
     info("Track cumulative usage across requests to stay within budget.")
   }
 
-  // ── goodbye ───────────────────────────────────────────────────────────────
+  //  scenario 7: interactive prompt loop 
+
+  private def scenario7(): Unit = {
+    header("Scenario 7 — Interactive Playground (try it yourself!)")
+    step("Type your own prompt and see a simulated traced response")
+    println(s"  ${GRAY}(Press Enter with no text or type 'exit' to quit the loop)$RESET")
+    var continue = true
+    while (continue) {
+      print(s"\n  ${boldColor("You:", GREEN)}  ")
+      val raw = scala.io.StdIn.readLine()
+      val input = if (raw == null) "" else raw.trim
+      if (input.isEmpty || input.equalsIgnoreCase("exit")) {
+        continue = false
+      } else {
+        println(s"  ${GRAY}   Sending to offline playground $RESET")
+        pause()
+        pause()
+        llmSays(s"[Offline simulation] You asked: \"$input\"")
+        llmSays("In a live session your provider would return a real response here.")
+        info(s"completion id: cmpl-live  model: (your provider)  tokens: ~${input.length / 4 + 10}")
+      }
+    }
+    info("Interactive session ended.")
+  }
+
+  //  goodbye 
 
   private def printGoodbye(): Unit = {
     println()
@@ -205,7 +245,7 @@ object CliPlaygroundDemo extends App {
     println()
   }
 
-  // ── entry point ───────────────────────────────────────────────────────────
+  //  entry point 
 
   printWelcome()
   scenario1()
@@ -214,5 +254,6 @@ object CliPlaygroundDemo extends App {
   scenario4()
   scenario5()
   scenario6()
+  scenario7()
   printGoodbye()
 }
