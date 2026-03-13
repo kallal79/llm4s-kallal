@@ -4,6 +4,7 @@ import com.anthropic.core.{ JsonObject, ObjectMappers }
 import com.anthropic.models.messages.{
   Message,
   MessageCreateParams,
+  RawContentBlockDeltaEvent,
   RawMessageStreamEvent,
   ThinkingConfigEnabled,
   Tool
@@ -20,6 +21,7 @@ import org.llm4s.error.ThrowableOps._
 
 import scala.jdk.CollectionConverters._
 import scala.util.Try
+import scala.collection.mutable
 
 /**
  * [[LLMClient]] implementation for Anthropic Claude models.
@@ -201,6 +203,7 @@ curl https://api.anthropic.com/v1/messages \
         // Create accumulator for building the final completion
         val accumulator                      = StreamingAccumulator.create()
         var currentMessageId: Option[String] = None
+        val blockIndexToToolId              = mutable.Map[Long, String]()
 
         // Process the stream
         val attempt = Try {
@@ -220,7 +223,7 @@ curl https://api.anthropic.com/v1/messages \
               }
 
               // Check for content block delta event
-              val contentDeltaOpt = event.contentBlockDelta()
+              val contentDeltaOpt: java.util.Optional[RawContentBlockDeltaEvent] = event.contentBlockDelta()
               if (contentDeltaOpt != null && contentDeltaOpt.isPresent) {
                 val contentDelta = contentDeltaOpt.get()
                 val delta        = contentDelta.delta()
@@ -261,6 +264,25 @@ curl https://api.anthropic.com/v1/messages \
                     }
                   }
                 }
+
+                // Handle incremental tool arguments emitted as input_json_delta.
+                // Anthropic streams tool JSON as fragments keyed by content block index.
+                Try(delta.isInputJson()).toOption.filter(identity).foreach { _ =>
+                  Try(delta.asInputJson()).toOption.foreach { inputJsonDelta =>
+                    val fragment   = Option(inputJsonDelta.partialJson()).getOrElse("")
+                    val toolCallId = blockIndexToToolId.getOrElse(contentDelta.index(), "")
+                    if (fragment.nonEmpty && toolCallId.nonEmpty) {
+                      val chunk = StreamedChunk(
+                        id = currentMessageId.getOrElse(""),
+                        content = None,
+                        toolCall = Some(ToolCall(id = toolCallId, name = "", arguments = ujson.Str(fragment))),
+                        finishReason = None
+                      )
+                      accumulator.addChunk(chunk)
+                      onChunk(chunk)
+                    }
+                  }
+                }
               }
 
               val contentStartOpt = event.contentBlockStart()
@@ -269,6 +291,7 @@ curl https://api.anthropic.com/v1/messages \
                 val block        = contentStart.contentBlock()
                 if (block.isToolUse) {
                   val toolUse = block.asToolUse()
+                  blockIndexToToolId(contentStart.index()) = toolUse.id()
                   val chunk = StreamedChunk(
                     id = currentMessageId.getOrElse(""),
                     content = None,

@@ -182,6 +182,7 @@ class AnthropicStreamingHandler extends BaseStreamingResponseHandler {
 
   private val sseParser                        = SSEParser.createStreamingParser()
   private var currentMessageId: Option[String] = None
+  private val blockIndexToToolId               = scala.collection.mutable.Map[Long, String]()
 
   override def processChunk(chunk: String): Result[Option[StreamedChunk]] =
     scala.util
@@ -196,6 +197,15 @@ class AnthropicStreamingHandler extends BaseStreamingResponseHandler {
                 event.data.foreach { data =>
                   Try(ujson.read(data)).toOption.foreach { json =>
                     currentMessageId = json.obj.get("message").flatMap(_("id").strOpt)
+                  }
+                }
+              case Some("content_block_start") =>
+                event.data.foreach { data =>
+                  Try(ujson.read(data)).toOption.foreach { json =>
+                    parseAnthropicContentBlockStart(json).foreach { c =>
+                      accumulator.addChunk(c)
+                      latestChunk = Some(c)
+                    }
                   }
                 }
               case Some("content_block_delta") =>
@@ -222,6 +232,29 @@ class AnthropicStreamingHandler extends BaseStreamingResponseHandler {
         error
       }
 
+  private def parseAnthropicContentBlockStart(json: Value): Option[StreamedChunk] =
+    Try {
+      val indexOpt    = json.obj.get("index").flatMap(_.numOpt).map(_.toLong)
+      val contentOpt  = json.obj.get("content_block")
+      val blockType   = contentOpt.flatMap(_.obj.get("type")).flatMap(_.strOpt).getOrElse("")
+      val toolId      = contentOpt.flatMap(_.obj.get("id")).flatMap(_.strOpt).getOrElse("")
+      val toolName    = contentOpt.flatMap(_.obj.get("name")).flatMap(_.strOpt).getOrElse("")
+
+      if (blockType == "tool_use" && toolId.nonEmpty) {
+        indexOpt.foreach(i => blockIndexToToolId(i) = toolId)
+        Some(
+          StreamedChunk(
+            id = currentMessageId.getOrElse(""),
+            content = None,
+            toolCall = Some(ToolCall(id = toolId, name = toolName, arguments = ujson.Obj())),
+            finishReason = None
+          )
+        )
+      } else {
+        None
+      }
+    }.toOption.flatten
+
   private def parseAnthropicDelta(json: Value): Option[StreamedChunk] =
     Try {
       val delta     = json("delta")
@@ -239,9 +272,21 @@ class AnthropicStreamingHandler extends BaseStreamingResponseHandler {
           )
 
         case "input_json_delta" =>
-          // Handle tool use deltas
-          // This would accumulate JSON for tool calls
-          None // Simplified for now
+          val fragment   = delta.obj.get("partial_json").flatMap(_.strOpt).getOrElse("")
+          val blockIndex = json.obj.get("index").flatMap(_.numOpt).map(_.toLong).getOrElse(0L)
+          val toolCallId = blockIndexToToolId.getOrElse(blockIndex, "")
+          if (fragment.nonEmpty && toolCallId.nonEmpty) {
+            Some(
+              StreamedChunk(
+                id = currentMessageId.getOrElse(""),
+                content = None,
+                toolCall = Some(ToolCall(id = toolCallId, name = "", arguments = ujson.Str(fragment))),
+                finishReason = None
+              )
+            )
+          } else {
+            None
+          }
 
         case _ =>
           None
