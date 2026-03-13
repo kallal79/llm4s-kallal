@@ -123,7 +123,16 @@ lazy val commonSettings = Seq(
 
 // ---- projects ----
 lazy val llm4s = (project in file("."))
-  .aggregate(core, samples, workspaceShared, workspaceRunner, workspaceClient, workspaceSamples, traceOpentelemetry)
+  .aggregate(
+    core,
+    samples,
+    workspaceShared,
+    workspaceRunner,
+    workspaceClient,
+    workspaceSamples,
+    traceOpentelemetry,
+    configPolicy
+  )
   .settings(
     publish / skip := true
   )
@@ -270,5 +279,16 @@ lazy val traceOpentelemetry = (project in file("modules/trace-opentelemetry"))
       Deps.opentelemetryApi,
       Deps.opentelemetrySdk,
       Deps.opentelemetryExporterOtlp
+    )
+  )
+
+lazy val configPolicy = (project in file("modules/config-policy"))
+  .settings(
+    name := "config-policy",
+    commonSettings,
+    Compile / mainClass := Some("org.llm4s.configpolicy.CheckPolicies"),
+    libraryDependencies ++= Seq(
+      Deps.config,
+      Deps.scalatest % Test
     )
   )
