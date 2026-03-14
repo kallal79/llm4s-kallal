@@ -40,7 +40,7 @@ import java.time.temporal.TemporalAdjusters
  */
 object CliPlaygroundDemo extends App {
 
-  //  helpers 
+  //  helpers
 
   private def header(title: String): Unit = {
     println()
@@ -76,7 +76,7 @@ object CliPlaygroundDemo extends App {
   private def nextWeekday(day: DayOfWeek): String =
     LocalDate.now().`with`(TemporalAdjusters.next(day)).toString
 
-  //  welcome 
+  //  welcome
 
   private def printWelcome(): Unit = {
     println()
@@ -89,7 +89,7 @@ object CliPlaygroundDemo extends App {
     println(s"  ${GRAY}Follow along to see what LLM4S can do, then connect a real provider.$RESET")
   }
 
-  //  scenario 1: simple completion 
+  //  scenario 1: simple completion
 
   private def scenario1(): Unit = {
     header("Scenario 1 — Simple Text Completion")
@@ -102,7 +102,7 @@ object CliPlaygroundDemo extends App {
     info("completion id: cmpl-demo-001  model: gpt-4o  tokens: 42")
   }
 
-  //  scenario 2: multi-turn conversation 
+  //  scenario 2: multi-turn conversation
 
   private def scenario2(): Unit = {
     header("Scenario 2 — Multi-Turn Conversation")
@@ -116,7 +116,7 @@ object CliPlaygroundDemo extends App {
     info("LLM4S keeps the full message history so the model remembers context.")
   }
 
-  //  scenario 3: tool calling 
+  //  scenario 3: tool calling
 
   private def scenario3(): Unit = {
     header("Scenario 3 — Tool Calling")
@@ -132,7 +132,7 @@ object CliPlaygroundDemo extends App {
     info("Tool calls are structured JSON — LLM4S validates arguments automatically.")
   }
 
-  //  scenario 4: agent pipeline 
+  //  scenario 4: agent pipeline
 
   private def scenario4(): Unit = {
     header("Scenario 4 — Agent Pipeline")
@@ -162,7 +162,7 @@ object CliPlaygroundDemo extends App {
     info("The agent orchestrated 4 tool calls automatically.")
   }
 
-  //  scenario 5: error handling 
+  //  scenario 5: error handling
 
   private def scenario5(): Unit = {
     header("Scenario 5 — Error Handling and Recovery")
@@ -184,7 +184,7 @@ object CliPlaygroundDemo extends App {
     info("LLM4S surfaces ToolCallError details so the LLM can retry or explain.")
   }
 
-  //  scenario 6: token usage 
+  //  scenario 6: token usage
 
   private def scenario6(): Unit = {
     header("Scenario 6 — Token Usage Awareness")
@@ -202,7 +202,7 @@ object CliPlaygroundDemo extends App {
     info("Track cumulative usage across requests to stay within budget.")
   }
 
-  //  scenario 7: interactive prompt loop 
+  //  scenario 7: interactive prompt loop
 
   private def scenario7(): Unit = {
     header("Scenario 7 — Interactive Playground (try it yourself!)")
@@ -211,7 +211,7 @@ object CliPlaygroundDemo extends App {
     var continue = true
     while (continue) {
       print(s"\n  ${boldColor("You:", GREEN)}  ")
-      val raw = scala.io.StdIn.readLine()
+      val raw   = scala.io.StdIn.readLine()
       val input = if (raw == null) "" else raw.trim
       if (input.isEmpty || input.equalsIgnoreCase("exit")) {
         continue = false
@@ -227,7 +227,7 @@ object CliPlaygroundDemo extends App {
     info("Interactive session ended.")
   }
 
-  //  goodbye 
+  //  goodbye
 
   private def printGoodbye(): Unit = {
     println()
@@ -245,7 +245,7 @@ object CliPlaygroundDemo extends App {
     println()
   }
 
-  //  entry point 
+  //  entry point
 
   printWelcome()
   scenario1()
